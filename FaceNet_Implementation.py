@@ -2,268 +2,188 @@ import os
 import numpy as np
 import cv2
 import tensorflow as tf
-from tensorflow.keras.models import load_model # type: ignore
+from tensorflow.keras.models import load_model
 from mtcnn.mtcnn import MTCNN
 from sklearn.preprocessing import Normalizer
 from sklearn.metrics.pairwise import cosine_similarity
-import time
+import pickle
+from datetime import datetime
 
-# Create directory for saving face embeddings
-if not os.path.exists('embeddings'):
-    os.makedirs('embeddings')
+# Configuration paths
+MODEL_PATH = 'facenet_keras_2024.h5'
+EMBEDDINGS_PATH = 'saved_embeddings.pkl' #Mathematical Transformation of the images
+REGISTERED_IMAGES_PATH = 'registered_images.txt'
 
-# Path to the FaceNet model - you'll need to set this to your actual path
-# You'll need to download this separately
-MODEL_PATH = 'facenet_keras_2024.h5'  # Update this path
-
-# Load the FaceNet model
-# If you run into compatibility issues, you'll need to use the right TF version
-# or convert the model as discussed
+# Load FaceNet model
 facenet_model = load_model(MODEL_PATH)
 print("FaceNet model loaded successfully.")
 
-# Initialize MTCNN detector
+# Initialize components
 detector = MTCNN()
-
-# Initialize the L2 normalizer
 l2_normalizer = Normalizer('l2')
 
 def get_face(img, box):
-    """Extract face from image based on bounding box"""
     x1, y1, width, height = box
     x1, y1 = abs(x1), abs(y1)
     x2, y2 = x1 + width, y1 + height
-    
-    # Extract the face
     face = img[y1:y2, x1:x2]
     return face, (x1, y1), (x2, y2)
 
 def preprocess_face(face_img):
-    """Preprocess face for FaceNet input"""
-    # Resize to the expected size
     face_img = cv2.resize(face_img, (160, 160))
-    
-    # Convert to RGB (if it's BGR from OpenCV)
     face_img = cv2.cvtColor(face_img, cv2.COLOR_BGR2RGB)
-    
-    # Convert data type to float32
-    face_img = face_img.astype(np.float32)
-    
-    # Normalize pixel values
-    mean, std = face_img.mean(), face_img.std()
-    face_img = (face_img - mean) / std
-    
-    # Expand dimensions to create a batch of size 1
-    face_img = np.expand_dims(face_img, axis=0)
-    
-    return face_img
+    face_img = (face_img - face_img.mean()) / face_img.std()
+    return np.expand_dims(face_img, axis=0)
 
 def get_embedding(face_img):
-    """Generate embedding vector from face image"""
-    # Preprocess the face image
-    face_img = preprocess_face(face_img)
-    
-    # Generate embedding
-    embedding = facenet_model.predict(face_img)[0]
-    
-    # Normalize embedding
-    embedding = l2_normalizer.transform(embedding.reshape(1, -1))[0]
-    
-    return embedding
+    embedding = facenet_model.predict(preprocess_face(face_img))[0]
+    return l2_normalizer.transform(embedding.reshape(1, -1))[0]
 
-def register_face(name):
-    """Register a new face with name"""
-    print(f"Registering face for {name}. Please look at the camera.")
-    cap = cv2.VideoCapture(0)
-    
-    # Wait for 2 seconds before capturing to give user time to prepare
-    start_time = time.time()
-    while time.time() - start_time < 2:
-        ret, frame = cap.read()
-        if not ret:
-            print("Failed to capture image from webcam")
-            return None
-        
-        cv2.putText(frame, f"Capturing in {int(3-(time.time()-start_time))}", (30, 30), 
-                   cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-        cv2.imshow('Register Face', frame)
-        if cv2.waitKey(1) == 27:  # ESC key to abort
-            cap.release()
-            cv2.destroyAllWindows()
-            return None
-    
-    # Capture frame
-    ret, frame = cap.read()
-    if not ret:
-        print("Failed to capture image from webcam")
-        cap.release()
-        cv2.destroyAllWindows()
-        return None
-    
-    # Detect faces using MTCNN
-    results = detector.detect_faces(frame)
-    
-    if not results:
-        print("No face detected. Please try again.")
-        cap.release()
-        cv2.destroyAllWindows()
-        return None
-    
-    # Get the largest face (assuming it's the main person)
-    largest_face = sorted(results, key=lambda x: x['box'][2] * x['box'][3], reverse=True)[0]
-    face_img, (x1, y1), (x2, y2) = get_face(frame, largest_face['box'])
-    
-    # Draw rectangle around the face
-    cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
-    cv2.putText(frame, name, (x1, y1-10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
-    
-    # Show the captured face
-    cv2.imshow('Captured Face', frame)
-    cv2.waitKey(1000)  # Display for 1 second
-    
-    # Generate and save embedding
-    try:
-        embedding = get_embedding(face_img)
-        np.save(f"embeddings/{name}.npy", embedding)
-        
-        # Save face image
-        cv2.imwrite(f"embeddings/{name}.jpg", face_img)
-        
-        print(f"Face successfully registered for {name}")
-        
-    except Exception as e:
-        print(f"Error generating embedding: {str(e)}")
-        cap.release()
-        cv2.destroyAllWindows()
-        return None
-    
-    cap.release()
-    cv2.destroyAllWindows()
-    return embedding
-
-def load_registered_faces():
-    """Load all registered face embeddings"""
+def register_faces_from_folder(dataset_path="dataset"):
     registered_faces = {}
-    
-    if not os.path.exists('embeddings'):
-        return registered_faces
-    
-    for file in os.listdir('embeddings'):
-        if file.endswith('.npy'):
-            name = os.path.splitext(file)[0]
-            embedding = np.load(f"embeddings/{file}")
-            registered_faces[name] = embedding
-    
+    for person_name in os.listdir(dataset_path):
+        person_path = os.path.join(dataset_path, person_name)
+        if os.path.isdir(person_path):
+            embeddings = []
+            for img_file in os.listdir(person_path):
+                if img_file.lower().endswith(('.jpg', '.jpeg', '.png')):
+                    img_path = os.path.join(person_path, img_file)
+                    img = cv2.imread(img_path)
+                    faces = detector.detect_faces(img)
+                    if faces:
+                        main_face = max(faces, key=lambda x: x['box'][2]*x['box'][3])
+                        face_img, _, _ = get_face(img, main_face['box'])
+                        try:
+                            embeddings.append(get_embedding(face_img))
+                        except Exception as e:
+                            print(f"Error processing {img_path}: {str(e)}")
+            if embeddings:
+                registered_faces[person_name] = np.array(embeddings)
+                print(f"Registered {len(embeddings)} embeddings for {person_name}")
     return registered_faces
 
 def recognize_face(embedding, registered_faces, threshold=0.5):
-    """Compare face embedding to registered faces"""
     if not registered_faces:
         return "Unknown", 0
+    similarities = {
+        name: np.max(cosine_similarity([embedding], embeddings))
+        for name, embeddings in registered_faces.items()
+    }
+    best_match = max(similarities, key=similarities.get)
+    return (best_match, similarities[best_match]) if similarities[best_match] > threshold else ("Unknown", 0)
+
+# Embeddings
+def save_embeddings(embeddings):
+    with open(EMBEDDINGS_PATH, 'wb') as f:
+        pickle.dump(embeddings, f)
+    print(f"Embeddings saved to {EMBEDDINGS_PATH}")
+
+def load_embeddings():
+    try:
+        with open(EMBEDDINGS_PATH, 'rb') as f:
+            return pickle.load(f)
+    except FileNotFoundError:
+        return None
+
+def check_dataset_modified(dataset_path):
+    try:
+        with open(REGISTERED_IMAGES_PATH, 'r') as f:
+            saved_files = {line.split('|')[0]: float(line.split('|')[1]) for line in f.read().splitlines()}
+    except FileNotFoundError:
+        return True
+
+    current_files = {}
+    for root, _, files in os.walk(dataset_path):
+        for file in files:
+            if file.lower().endswith(('.jpg', '.jpeg', '.png')):
+                path = os.path.join(root, file)
+                current_files[path] = os.path.getmtime(path)
     
-    max_similarity = -1
-    best_match = "Unknown"
-    
-    for name, ref_embedding in registered_faces.items():
-        similarity = cosine_similarity(embedding.reshape(1, -1), 
-                                      ref_embedding.reshape(1, -1))[0][0]
-        
-        if similarity > max_similarity:
-            max_similarity = similarity
-            best_match = name
-    
-    if max_similarity < threshold:
-        return "Unknown", max_similarity
-        
-    return best_match, max_similarity
+    return saved_files != current_files
+
+def update_registered_images(dataset_path):
+    registered = []
+    for root, _, files in os.walk(dataset_path):
+        for file in files:
+            if file.lower().endswith(('.jpg', '.jpeg', '.png')):
+                path = os.path.join(root, file)
+                registered.append(f"{path}|{os.path.getmtime(path)}")
+    with open(REGISTERED_IMAGES_PATH, 'w') as f:
+        f.write('\n'.join(registered))
 
 def main():
-    print("FaceNet Facial Recognition with MTCNN")
-    print("=====================================")
-    print("1. Register a new face")
-    print("2. Start recognition")
-    print("3. Exit")
+    print("Face Recognition System")
+    print("1. Register Faces (Train)")
+    print("2. Start Recognition")
+    print("3. Save Current Model")
+    print("4. Exit")
     
-    registered_faces = load_registered_faces()
-    print(f"\nLoaded {len(registered_faces)} registered faces.")
-    
+    registered_faces = load_embeddings() or {}
+    if registered_faces:
+        print("\nPre-loaded embeddings:")
+        for name, data in registered_faces.items():
+            print(f"→ {name} ({len(data)} embeddings)")
+
     while True:
-        choice = input("\nEnter your choice (1-3): ")
+        choice = input("\nChoose option (1-4): ").strip()
         
         if choice == '1':
-            name = input("Enter name for the new face: ")
-            embedding = register_face(name)
-            if embedding is not None:
-                registered_faces[name] = embedding
+            dataset_path = input("Dataset path [dataset]: ").strip() or "dataset"
+            if not check_dataset_modified(dataset_path):
+                print("Using existing embeddings (dataset unchanged)")
+                registered_faces = load_embeddings()
+                continue
+                
+            registered_faces = register_faces_from_folder(dataset_path)
+            if registered_faces:
+                save_embeddings(registered_faces)
+                update_registered_images(dataset_path)
         
         elif choice == '2':
-            # Start webcam recognition
-            cap = cv2.VideoCapture(0)
-            fps_start_time = time.time()
-            fps_counter = 0
-            fps = 0
+            if not registered_faces:
+                print("No registered faces! Train first.")
+                continue
             
+            cap = cv2.VideoCapture(0)
             try:
-                while True:
+                while cap.isOpened():
                     ret, frame = cap.read()
                     if not ret:
-                        print("Failed to capture image from webcam")
-                        break
+                        continue
                     
-                    # Calculate FPS
-                    fps_counter += 1
-                    if time.time() - fps_start_time >= 1.0:
-                        fps = fps_counter
-                        fps_counter = 0
-                        fps_start_time = time.time()
+                    rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                    faces = detector.detect_faces(rgb_frame)
                     
-                    # Make a copy for drawing
-                    display_frame = frame.copy()
-                    
-                    # Detect faces
-                    try:
-                        faces = detector.detect_faces(frame)
+                    for face in faces:
+                        face_img, (x1, y1), (x2, y2) = get_face(frame, face['box'])
+                        embedding = get_embedding(face_img)
+                        name, confidence = recognize_face(embedding, registered_faces)
                         
-                        for face_info in faces:
-                            # Extract face
-                            face_img, (x1, y1), (x2, y2) = get_face(frame, face_info['box'])
-                            
-                            # Get embedding and recognize
-                            embedding = get_embedding(face_img)
-                            name, confidence = recognize_face(embedding, registered_faces)
-                            
-                            # Determine color based on match (green for known, red for unknown)
-                            color = (0, 255, 0) if name != "Unknown" else (0, 0, 255)
-                            
-                            # Draw rectangle and name
-                            cv2.rectangle(display_frame, (x1, y1), (x2, y2), color, 2)
-                            cv2.putText(display_frame, f"{name} ({confidence:.2f})", 
-                                      (x1, y1-10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, color, 2)
+                        color = (0, 255, 0) if name != "Unknown" else (0, 0, 255)
+                        cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+                        cv2.putText(frame, f"{name} ({confidence:.2f})", (x1, y1-10),
+                                   cv2.FONT_HERSHEY_SIMPLEX, 0.8, color, 2)
                     
-                    except Exception as e:
-                        print(f"Error in face detection/recognition: {str(e)}")
-                    
-                    # Display FPS
-                    cv2.putText(display_frame, f"FPS: {fps}", (20, 20), 
-                               cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
-                    
-                    # Show frame
-                    cv2.imshow('Facial Recognition', display_frame)
-                    
-                    # Exit on ESC
+                    cv2.imshow('Face Recognition', frame)
                     if cv2.waitKey(1) == 27:
                         break
-            
             finally:
                 cap.release()
                 cv2.destroyAllWindows()
         
         elif choice == '3':
-            print("Exiting program...")
+            if registered_faces:
+                save_embeddings(registered_faces)
+                print("Model saved successfully!")
+            else:
+                print("No embeddings to save!")
+        
+        elif choice == '4':
+            print("Exiting system...")
             break
         
         else:
-            print("Invalid choice. Please try again.")
+            print("Invalid choice. Try again.")
 
 if __name__ == "__main__":
     main()
