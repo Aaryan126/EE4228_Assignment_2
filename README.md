@@ -4,4 +4,4 @@
 
 ### Create a folder called 'dataset', within which put all the image data
 
-### Run the python file FaceNet_Implementation.py - follow instructions as they appear on the terminal
+### Run the python file 'FaceNet_Implementation.py' - follow instructions as they appear on the terminal
