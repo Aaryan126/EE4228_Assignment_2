@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Face Recognition</title>
+    <style>
+        body { margin: 0; padding: 20px; background: #1a1a1a; }
+        .container { max-width: 600px; margin: 0 auto; }
+        h1 { color: #fff; text-align: center; margin-bottom: 30px; }
+        #video-feed { 
+            width: 100%; 
+            border-radius: 10px; 
+            box-shadow: 0 0 20px rgba(0,255,0,0.3);
+        }
+        .status {
+            color: #fff;
+            text-align: center;
+            margin-top: 20px;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Real-Time Face Recognition</h1>
+        <img id="video-feed" src="{{ url_for('video_feed') }}">
+        <div class="status">STATUS: <span id="status">LIVE</span></div>
+    </div>
+
+    <script>
+        // Connection status monitoring
+        const video = document.getElementById('video-feed');
+        const status = document.getElementById('status');
+        
+        video.onerror = function() {
+            status.textContent = 'CONNECTION LOST - RECONNECTING...';
+            setTimeout(() => {
+                video.src = "{{ url_for('video_feed') }}";
+                status.textContent = 'LIVE';
+            }, 1000);
+        };
+    </script>
+</body>
+</html>
