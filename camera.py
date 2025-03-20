@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 import cv2
 from functions import *
+import re
 
 # if to export data
 do_export = True
@@ -19,12 +20,15 @@ face_encodings = []
 face_names = []
 process_this_frame = True
 
+frame_count = 0
+process_every_n_frames = 1
+
 while True:
 	# Grab a single frame of video
 	_, frame = video_capture.read()
 
-	# Only process every other frame of video to save time
-	if process_this_frame:
+	frame_count += 1  # Increment frame counter
+	if frame_count % process_every_n_frames == 0:  # Process every n frames
 		times = 0.5
 		# Resize frame of video to 1/4 size for faster face recognition processing
 		small_frame = cv2.resize(frame, (0, 0), fx=times, fy=times)
@@ -35,15 +39,16 @@ while True:
 		
 		# Find all the faces and face encodings in the current frame of video
 		face_locations = get_face_locations(rgb_small_frame)
-		face_encodings = get_face_encodings(rgb_small_frame, face_locations)
+		face_encodings = get_face_encodings(rgb_small_frame)
 
 		face_names = []
 		for face_encoding in face_encodings:
 			# Or instead, use the known face with the smallest distance to the new face
 			face_distances = face_distance(known_face_encodings, face_encoding)
 			best_match_index = np.argmin(face_distances)
-			# print(face_distances[best_match_index])
+			print(face_distances[best_match_index])
 			if face_distances[best_match_index] <= threshold:
+				print(face_distances[best_match_index])
 				name = known_face_labels[best_match_index]
 
 				if do_export:
@@ -51,27 +56,31 @@ while True:
 			else:
 				name = "Unknown"
 
+			match = re.search(r"^(\w+)_", name)
+			name = match.group(1) if match else name
 			face_names.append(name)
 
-	process_this_frame = not process_this_frame
+		# process_this_frame = not process_this_frame
 
+		if face_encodings.any():
+			# Display the results
+			for (top, right, bottom, left), name in zip(face_locations, face_names):
+				# Scale back up since detection was on a smaller frame
+				scale_x = frame.shape[1] / rgb_small_frame.shape[1]
+				scale_y = frame.shape[0] / rgb_small_frame.shape[0]
 
-	# Display the results
-	for (top, right, bottom, left), name in zip(face_locations, face_names):
-		# Scale back up face locations since the frame we detected in was scaled to 1/4 size
-		if times != 1:
-			top = int(top * (1/times))
-			right = int(right * (1/times))
-			bottom = int(bottom * (1/times))
-			left = int(left * (1/times))
+				top = int(top * scale_y)
+				right = int(right * scale_x)
+				bottom = int(bottom * scale_y)
+				left = int(left * scale_x)
 
-		# Draw a box around the face
-		cv2.rectangle(frame, (left, top), (right, bottom), (0, 0, 255), 2)
+				# Draw a box around the face
+				cv2.rectangle(frame, (left, top), (right, bottom), (0, 0, 255), 2)
 
-		# Draw a label with a name below the face
-		cv2.rectangle(frame, (left, bottom - 35), (right, bottom), (255, 0, 0), cv2.FILLED)
-		font = cv2.FONT_HERSHEY_DUPLEX
-		cv2.putText(frame, name, (left + 6, bottom - 6), font, 1.0, (255, 255, 255), 1)
+				# Draw label with name
+				cv2.rectangle(frame, (left, bottom - 35), (right, bottom), (255, 0, 0), cv2.FILLED)
+				font = cv2.FONT_HERSHEY_DUPLEX
+				cv2.putText(frame, name, (left + 6, bottom - 6), font, 1.0, (255, 255, 255), 1)
 
 	# Display the resulting image
 	cv2.imshow('Video', frame)
