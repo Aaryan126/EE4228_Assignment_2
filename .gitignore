@@ -1,5 +1,6 @@
 images/*
-encodings/*.npz
-**/__pycache__
+encodings/*
+__pycache__/*
 *.pyc
-data.csv
+test/*
+checkpoints/*

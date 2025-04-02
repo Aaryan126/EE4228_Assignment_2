@@ -4,7 +4,8 @@ import re
 
 # metrics for face matching
 metric = "euclidean"
-threshold= 90
+threshold = 180
+# threshold= 90
 # metric = "cosine"
 # threshold = 0.000015
 print(f"Metric funtion is {metric} with threshold: {threshold}\n")
@@ -41,7 +42,7 @@ while True:
 			# Use the known face with the smallest distance to the new face
 			face_distances = face_distance(known_face_encodings, face_encoding, metric)
 			best_match_index = np.argmin(face_distances)
-			# print(face_distances[best_match_index])
+			print(face_distances[best_match_index])
 			if face_distances[best_match_index] <= threshold:
 				name = known_face_labels[best_match_index]
 

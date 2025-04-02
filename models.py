@@ -4,7 +4,7 @@ from PIL import Image
 from mtcnn import MTCNN
 import cv2
 from keras_vggface.vggface import VGGFace
-from tensorflow.keras.models import load_model
+from tensorflow.keras.models import load_model, Model
 from sklearn.preprocessing import StandardScaler
 
 # using dlib for face detection and alignment
@@ -149,13 +149,14 @@ print(f"Database file: {file_name}\n")
 # load resnet50 model for feature extraction
 checkpoint_path = BASE + "checkpoints/resnet50_face_recognition.h5"
 if os.path.exists(checkpoint_path):
+	base_model = VGGFace(model='resnet50', include_top=False, input_shape=(224, 224, 3))
+	resnet50_features = Model(inputs=base_model.input, outputs=base_model.output)
 	print(f"Loading checkpoint from `{checkpoint_path}`...")
-	resnet50_features = load_model(checkpoint_path)
-	resnet50_features.trainable = False
+	resnet50_features.load_weights(checkpoint_path, by_name=True)
 	print("Model checkpoint loaded.")
 else:
 	print("No checkpoint found. Initializing a new model...")
-	resnet50_features = VGGFace(model='resnet50', include_top=False, input_shape=(224, 224, 3), pooling="avg")
+	resnet50_features = VGGFace(model='resnet50', include_top=False, input_shape=(224, 224, 3))
 
 print("Embedding extraction model loaded...\n")
 
