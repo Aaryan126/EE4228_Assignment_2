@@ -4,7 +4,7 @@ import re
 
 # metrics for face matching
 metric = "euclidean"
-threshold = 100
+threshold = 150
 # metric = "cosine"
 # threshold = 0.000015
 print(f"Metric funtion is {metric} with threshold: {threshold}\n")
