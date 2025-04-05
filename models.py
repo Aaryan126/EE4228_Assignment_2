@@ -29,7 +29,7 @@ def face_distance(encodings, encoding, metric):
         a1 = np.sum(np.multiply(encodings, encoding), axis=1)
         b1 = np.sum(np.multiply(encodings, encodings), axis=1)
         c1 = np.sum(np.multiply([encoding], [encoding]), axis=1)
-        return (1 - (a1 / (b1**.5 * c1**.5)))
+        return ((a1 / (b1**.5 * c1**.5)))
 
 def MTCNN_face_detector(frame):
 	face_detector = MTCNN()
