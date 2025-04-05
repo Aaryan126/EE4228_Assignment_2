@@ -139,7 +139,7 @@ def remove_image(label):
 
 
 # define base path for the project
-BASE = r"C:/Users/jy158/Desktop/NTU/Notes/Y4S2/EE4228 Intelligent System Design/Assignment/real-time-one-shot-face-recognition/"
+BASE = r"C:/Users/jy158/Desktop/NTU/Notes/Y4S2/EE4228 Intelligent System Design/Assignment/EE4228_Assignment_2/"
 
 # location to store embeddings
 file_name = BASE + "encodings/database.npz"

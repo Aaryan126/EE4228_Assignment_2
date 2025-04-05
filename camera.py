@@ -3,10 +3,10 @@ from models import *
 import re
 
 # metrics for face matching
-metric = "euclidean"
-threshold = 150
-# metric = "cosine"
-# threshold = 0.000015
+# metric = "euclidean"
+# threshold = 110
+metric = "cosine"
+threshold = 0.4
 print(f"Metric funtion is {metric} with threshold: {threshold}\n")
 
 print("Connecting to camera...")
@@ -41,8 +41,15 @@ while True:
 			# Use the known face with the smallest distance to the new face
 			face_distances = face_distance(known_face_encodings, face_encoding, metric)
 			best_match_index = np.argmin(face_distances)
-			print(face_distances[best_match_index])
-			if face_distances[best_match_index] <= threshold:
+			best_distance = face_distances[best_match_index]
+			print(best_distance)
+
+			# Compute confidence score
+			# confidence = max(0, (1 - best_distance / threshold)) * 100
+			confidence = best_distance
+
+			# if face_distances[best_match_index] <= threshold:
+			if face_distances[best_match_index] >= threshold:
 				name = known_face_labels[best_match_index]
 
 			else:
@@ -50,7 +57,7 @@ while True:
 
 			match = re.search(r"^(\w+)_", name)
 			name = match.group(1) if match else name
-			face_names.append(name)
+			face_names.append(f"{name} ({confidence:.2f})")
 
 		if face_encodings.any():
 			# Display the results
