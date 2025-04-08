@@ -7,12 +7,14 @@ from tensorflow.keras.optimizers import Adam
 from sklearn.model_selection import train_test_split
 from mtcnn.mtcnn import MTCNN
 import cv2
+from tensorflow.keras.callbacks import ModelCheckpoint, Callback
+from sklearn.metrics import precision_score, recall_score, f1_score, accuracy_score
 
 os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 
 ####### Change as per your paths
 dataset_path = 'dataset'
-model_path = 'FaceNet/facenet_keras_2024.h5'
+model_path = 'facenet_keras_2024.h5'
 output_model_path = 'Finetuned_FaceNet/finetuned_facenet_mtcnn.keras' 
 
 # Parameters
@@ -110,23 +112,57 @@ x = Dense(128, activation='relu')(x)
 x = Dropout(0.5)(x)
 predictions = Dense(num_classes, activation='softmax')(x)
 
+# Create a callback that saves the model's weights during training
+checkpoint_callback = ModelCheckpoint(
+    filepath=output_model_path,
+    save_best_only=True,  # Save only the best model based on validation loss
+    monitor="val_loss",
+    mode="min",
+    verbose=1
+)
+
+# Custom callback to compute precision, recall, and F1-score after each epoch
+class MetricsCallback(Callback):
+    def on_epoch_end(self, epoch, logs=None):
+        y_pred = np.argmax(self.model.predict(X_val), axis=1)  # Get predicted class labels
+        y_true = y_val
+
+        precision = precision_score(y_true, y_pred, average='macro')
+        recall = recall_score(y_true, y_pred, average='macro')
+        f1 = f1_score(y_true, y_pred, average='macro')
+        accuracy = accuracy_score(y_true, y_pred)
+
+        print(f"\nEpoch {epoch+1} - Precision: {precision:.4f}, Recall: {recall:.4f}, F1-score: {f1:.4f}, Accuracy: {accuracy:.4f}")
+
 # Create new model
 model = Model(inputs=base_model.input, outputs=predictions)
 
 # Compile with a lower learning rate
 model.compile(optimizer=Adam(learning_rate=0.0001),
-              loss='sparse_categorical_crossentropy',
-              metrics=['accuracy'])
+              loss='sparse_categorical_crossentropy')
 
 # Train the model
 history = model.fit(X_train, y_train,
                     batch_size=BATCH_SIZE,
                     epochs=EPOCHS,
-                    validation_data=(X_val, y_val))
+                    validation_data=(X_val, y_val), 
+                    callbacks=[checkpoint_callback, MetricsCallback()])
 
 # Save the fine-tuned model
-model.save(output_model_path)
+# model.save(output_model_path)
 
-print(f"Model fine-tuned and saved as {output_model_path}")
-print(f"Final training accuracy: {history.history['accuracy'][-1]:.4f}")
-print(f"Final validation accuracy: {history.history['val_accuracy'][-1]:.4f}")
+# print(f"Model fine-tuned and saved as {output_model_path}")
+# print(f"Final training accuracy: {history.history['accuracy'][-1]:.4f}")
+# print(f"Final validation accuracy: {history.history['val_accuracy'][-1]:.4f}")
+
+# Predict on validation set
+y_pred_finetune = np.argmax(model.predict(X_val), axis=1)
+y_true = y_val
+
+# Calculate metrics for the pretrained model
+precision_finetune = precision_score(y_true, y_pred_finetune, average='macro')
+recall_finetune = recall_score(y_true, y_pred_finetune, average='macro')
+f1_finetune = f1_score(y_true, y_pred_finetune, average='macro')
+accuracy_finetune = accuracy_score(y_true, y_pred_finetune)
+
+print(f"Finetuned Model - Precision: {precision_finetune:.4f}, Recall: {recall_finetune:.4f}, F1-score: {f1_finetune:.4f}, Accuracy: {accuracy_finetune:.4f}")

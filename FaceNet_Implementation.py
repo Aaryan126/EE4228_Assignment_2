@@ -8,14 +8,27 @@ from sklearn.preprocessing import Normalizer
 from sklearn.metrics.pairwise import cosine_similarity
 import pickle
 from datetime import datetime
+import time
+
+# lambda function if using fine-tuned model
+def scaling(x, scale=1.0):
+    return x * scale
 
 # Configuration paths
-MODEL_PATH = 'facenet_keras_2024.h5'
-EMBEDDINGS_PATH = 'saved_embeddings.pkl' #Mathematical Transformation of the images
-REGISTERED_IMAGES_PATH = 'registered_images.txt'
+# ***********************
 
-# Load FaceNet model
-facenet_model = load_model(MODEL_PATH)
+# Uncomment if using fine-tuned model
+MODEL_PATH = 'Finetuned_FaceNet/finetuned_facenet_mtcnn.keras'
+EMBEDDINGS_PATH = 'finetuned_saved_embeddings.pkl'
+REGISTERED_IMAGES_PATH = 'finetuned_registered_images.txt'
+facenet_model = load_model(MODEL_PATH, custom_objects={'scaling': scaling})
+
+# Uncomment if using pretrained model
+# MODEL_PATH = 'FaceNet/facenet_keras_2024.h5' 
+# EMBEDDINGS_PATH = 'pretrained_saved_embeddings.pkl'
+# REGISTERED_IMAGES_PATH = 'pretrained_registered_images.txt'
+# facenet_model = load_model(MODEL_PATH)
+
 print("FaceNet model loaded successfully.")
 
 # Initialize components
@@ -152,7 +165,10 @@ def main():
                         continue
                     
                     rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                    start_time = time.time()  # Start timer
                     faces = detector.detect_faces(rgb_frame)
+                    detection_time = time.time() - start_time # End timer
+                    print(f"Time taken to detect face: {detection_time:.4f} seconds")
                     
                     for face in faces:
                         face_img, (x1, y1), (x2, y2) = get_face(frame, face['box'])
